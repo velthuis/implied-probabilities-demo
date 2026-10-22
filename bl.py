@@ -1,16 +1,14 @@
 """Risk-neutral distribution from option prices: Breeden-Litzenberger on a smoothed smile.
 
-Breeden and Litzenberger (1978): with discount factor df and call prices c(K),
-    P(S_T <= K)  = 1 + (1/df) dc/dK        (cumulative probability)
-    density f(K) = (1/df) d2c/dK2           (probability per index point)
-Second derivatives of raw quotes are too noisy to use (that is what butterflies measure), so
-we follow the "smoothed implied volatility smile" approach (Shimko 1993; Bliss and
-Panigirtzoglou 2002; Malz 2014):
+Breeden and Litzenberger (1978) showed that option prices across strikes imply a probability
+distribution for the index at expiration. Raw quotes are too noisy to use directly, so we follow
+the "smoothed implied volatility smile" approach (Shimko 1993; Bliss and Panigirtzoglou 2002;
+Malz 2014):
   1. turn each out-of-the-money mid-quote into a Black implied volatility,
   2. fit a smoothing spline through the vols, weighted by how tight each quote is,
-     smooth enough that the density has no kinks,
-  3. turn the smooth curve back into call prices on a fine grid of strikes,
-  4. differentiate those prices numerically.
+  3. compute the distribution in closed form from Black's formula and the smooth curve: at each
+     strike, the curve's level, slope and curvature give the cumulative probability and the
+     density (see bl_distribution).
 We report nothing beyond the lowest and highest quoted strikes: no extrapolation.
 
 Units: strikes and prices in index points, T in years, volatilities as annual decimals,
@@ -27,6 +25,7 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
+from scipy.special import ndtr
 
 from pricing import norm_cdf
 
@@ -37,10 +36,10 @@ def read_cboe_csv(source) -> tuple[pd.DataFrame, float, date]:
     """Read Cboe's delayed-quotes download (spx_quotedata.csv) exactly as saved.
 
     `source` is a path, or a file-like object with text or bytes. The header lines carry the
-    index level ("Last: 4183.96") and the quote date ("Date: April 27, 2022, 4:59 PM EDT").
+    index level ("Last: 7690.73") and the quote date ("Date: October 19, 2026 at 11:40 PM EDT").
     Returns (chain, index level, quote date). The chain has one row per series and strike:
     expiration (date), root (SPX, SPXW, ...), strike, call_bid, call_ask, put_bid, put_ask,
-    call_oi, put_oi.
+    call_oi, put_oi, and Cboe's own implied vols, call_iv_cboe and put_iv_cboe (0 if blank).
     """
     if hasattr(source, "read"):
         raw = source.read()
@@ -63,8 +62,8 @@ def read_cboe_csv(source) -> tuple[pd.DataFrame, float, date]:
 
     h = [c.strip() for c in rows[head]]
     k, c0, p0 = h.index("Strike"), h.index("Calls"), h.index("Puts")
-    call = {name: c0 + 1 + h[c0 + 1:k].index(name) for name in ("Bid", "Ask", "Open Interest")}
-    put = {name: p0 + 1 + h[p0 + 1:].index(name) for name in ("Bid", "Ask", "Open Interest")}
+    call = {name: c0 + 1 + h[c0 + 1:k].index(name) for name in ("Bid", "Ask", "IV", "Open Interest")}
+    put = {name: p0 + 1 + h[p0 + 1:].index(name) for name in ("Bid", "Ask", "IV", "Open Interest")}
 
     def num(x):
         x = x.strip().replace(",", "")
@@ -84,6 +83,7 @@ def read_cboe_csv(source) -> tuple[pd.DataFrame, float, date]:
             "call_bid": num(r[call["Bid"]]), "call_ask": num(r[call["Ask"]]),
             "put_bid": num(r[put["Bid"]]), "put_ask": num(r[put["Ask"]]),
             "call_oi": num(r[call["Open Interest"]]), "put_oi": num(r[put["Open Interest"]]),
+            "call_iv_cboe": num(r[call["IV"]]), "put_iv_cboe": num(r[put["IV"]]),
         })
     if not out:
         raise ValueError("the file has a header but no option rows")
@@ -216,6 +216,14 @@ class Smile:
             raise ValueError("strike outside the quoted range; this app does not extrapolate")
         return self.spline(np.log(K / self.F))
 
+    def slope_curvature(self, K):
+        """d(vol)/dK and d2(vol)/dK2 at K. The spline is in x = ln(K/F), so by the chain rule
+        dvol/dK = g'(x)/K and d2vol/dK2 = (g''(x) - g'(x))/K^2."""
+        K = np.asarray(K, dtype=float)
+        x = np.log(K / self.F)
+        g1, g2 = self.spline.derivative(1)(x), self.spline.derivative(2)(x)
+        return g1 / K, (g2 - g1) / K**2
+
 
 def fit_smile(iv_table: pd.DataFrame, F: float, smoothing: float = 0.01) -> Smile:
     """Weighted smoothing spline through the implied vols (as in Bliss and Panigirtzoglou 2002).
@@ -239,23 +247,31 @@ def fit_smile(iv_table: pd.DataFrame, F: float, smoothing: float = 0.01) -> Smil
 # ---------- Breeden-Litzenberger ----------
 
 def bl_distribution(smile: Smile, T: float, df: float, step: float = 5.0) -> pd.DataFrame:
-    """Call prices from the smooth smile on a grid, then Breeden-Litzenberger.
+    """The risk-neutral distribution on a grid of strikes, in closed form from the smile.
 
-    Returns strike, call, cdf = P(S_T <= K) = 1 + (1/df) dc/dK, and pdf = (1/df) d2c/dK2
-    (probability per index point), from the lowest to the highest quoted strike.
+    With sigma = sigma(K), its slope s1 = dsigma/dK and curvature s2 = d2sigma/dK2, and Black's
+    d1, d2 and v = sigma sqrt(T) at each strike (phi = standard normal density):
+        cdf = P(S_T <= K) = N(-d2) + K phi(d2) sqrt(T) s1
+        pdf = phi(d2) [1/(K v) + 2 d1 s1/sigma + K sqrt(T) d1 d2 s1^2/sigma + K sqrt(T) s2]
+    (probability per index point). With a flat smile (s1 = s2 = 0) these are the Black-Scholes
+    (lognormal) probabilities; the smile's slope and curvature are what move them away from it.
+    Also returns the call price at each strike. Covers the lowest to the highest quoted strike.
     """
     n = int(round((smile.k_hi - smile.k_lo) / step)) + 1
     K = np.linspace(smile.k_lo, smile.k_hi, n)
-    h = K[1] - K[0]
-    vols = smile.vol(K)
-    if np.min(vols) <= 0:
+    sig = smile.vol(K)
+    if np.min(sig) <= 0:
         raise ValueError("the smoothed volatility curve drops below zero; it needs more smoothing")
-    c = np.array([black_call(smile.F, k, v, T, df) for k, v in zip(K, vols)])
-    cdf = 1 + np.gradient(c, h) / df
-    pdf = np.empty_like(c)
-    pdf[1:-1] = (c[2:] - 2 * c[1:-1] + c[:-2]) / h**2 / df
-    pdf[0], pdf[-1] = pdf[1], pdf[-2]
-    out = pd.DataFrame({"strike": K, "call": c, "cdf": cdf, "pdf": pdf})
+    s1, s2 = smile.slope_curvature(K)
+    F, rt = smile.F, sqrt(T)
+    v = sig * rt
+    d1 = (np.log(F / K) + 0.5 * v**2) / v
+    d2 = d1 - v
+    phi = np.exp(-0.5 * d2**2) / sqrt(2 * np.pi)
+    cdf = ndtr(-d2) + K * phi * rt * s1
+    pdf = phi * (1 / (K * v) + 2 * d1 * s1 / sig + K * rt * d1 * d2 * s1**2 / sig + K * rt * s2)
+    call = df * (F * ndtr(d1) - K * ndtr(d2))
+    out = pd.DataFrame({"strike": K, "call": call, "cdf": cdf, "pdf": pdf})
     out.attrs["df"] = df
     return out
 
@@ -296,8 +312,7 @@ SMOOTHING_GRID = (0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0)
 def auto_smile(iv_table: pd.DataFrame, F: float, T: float, df: float, grid=SMOOTHING_GRID):
     """The least smoothing on `grid` whose distribution passes density_checks.
 
-    Malz (2014) picks his differencing step the same way: the smallest one that keeps the
-    density non-negative. Returns (smoothing, smile, distribution, checks); raises ValueError
+    The rule follows Malz (2014): no more smoothing than a non-negative density needs. Returns (smoothing, smile, distribution, checks); raises ValueError
     if no level passes.
     """
     for s in grid:
@@ -310,6 +325,73 @@ def auto_smile(iv_table: pd.DataFrame, F: float, T: float, df: float, grid=SMOOT
         if checks["valid"]:
             return s, smile, dist, checks
     raise ValueError("no smoothing level gives a valid distribution for this expiration")
+
+
+def ask_market(dist: pd.DataFrame, level: float, side: str, F: float, sigma: float, T: float) -> dict:
+    """The probability that the index ends below (side="below") or above (side="above") `level`
+    at expiration, from the implied distribution and from Black-Scholes.
+
+    Returns {"implied", "bound", "bs"}. Inside the quoted strikes, `implied` is the probability and
+    `bound` is None. Outside them the app does not extrapolate: `implied` is a bound and `bound`
+    says which kind ("at most" or "at least"). Below the lowest strike, for example, the chance of
+    ending below `level` is at most the chance of ending below that strike. `bs` uses one
+    volatility, `sigma`, for every strike.
+    """
+    if side not in ("below", "above"):
+        raise ValueError("side must be 'below' or 'above'")
+    if level <= 0:
+        raise ValueError("the level must be positive")
+    K, cdf = dist["strike"].to_numpy(), dist["cdf"].to_numpy()
+    below_bs = lognormal_cdf(F, sigma, level, T)
+    bs = below_bs if side == "below" else 1 - below_bs
+    p, bound = prob_below(dist, level), None
+    if p is None:
+        if level < K[0]:
+            p, bound = float(cdf[0]), "at most"            # P(S_T <= level) <= P(S_T <= lowest strike)
+        else:
+            p, bound = float(cdf[-1]), "at least"          # P(S_T <= level) >= P(S_T <= highest strike)
+    if side == "above":
+        p = 1 - p
+        bound = {"at most": "at least", "at least": "at most"}.get(bound)
+    return {"implied": float(p), "bound": bound, "bs": float(bs)}
+
+
+def real_world(dist: pd.DataFrame, gamma: float) -> pd.DataFrame:
+    """The real-world distribution that the market's risk-neutral one implies if investors have
+    power utility with relative risk aversion `gamma` (Bliss and Panigirtzoglou 2004):
+
+        p(S) = q(S) S^gamma / (integral of q(x) x^gamma dx)
+
+    Investors who fear losses pay more for outcomes where the index is low, so the market's
+    (risk-neutral) density q puts more weight there than the real-world density p. With gamma = 0
+    the two are the same. Covers the quoted strikes only: both densities are scaled to add up to 1
+    over that range (the tails outside it hold well under 1% here). Returns strike, pdf, cdf.
+    """
+    if gamma < 0:
+        raise ValueError("risk aversion must be zero or positive")
+    K = dist["strike"].to_numpy()
+    q = np.maximum(dist["pdf"].to_numpy(), 0.0)      # a valid fit has at most 0.1% negative mass
+    w = q * (K / K.mean()) ** gamma                  # scaled by K.mean() to keep the numbers small
+    cdf = np.concatenate([[0.0], np.cumsum((w[1:] + w[:-1]) / 2 * np.diff(K))])
+    total = cdf[-1]
+    if total <= 0:
+        raise ValueError("the distribution has no probability inside the quoted strikes")
+    return pd.DataFrame({"strike": K, "pdf": w / total, "cdf": cdf / total})
+
+
+def mean_level(dist: pd.DataFrame) -> float:
+    """Average index level at expiration over the quoted strikes (density scaled to add up to 1)."""
+    K, f = dist["strike"].to_numpy(), np.maximum(dist["pdf"].to_numpy(), 0.0)
+    trapezoid = getattr(np, "trapezoid", None) or np.trapz
+    return float(trapezoid(K * f, K) / trapezoid(f, K))
+
+
+def equity_premium(risk_neutral: pd.DataFrame, real: pd.DataFrame, T: float) -> float:
+    """Expected return above the risk-free rate, per year and continuously compounded, that the
+    real-world distribution implies: ln(real-world mean / risk-neutral mean) / T. Under the
+    risk-neutral distribution the index is expected to grow at the risk-free rate (net of
+    dividends): its mean is the forward price."""
+    return float(np.log(mean_level(real) / mean_level(risk_neutral)) / T)
 
 
 def smile_prices(smile: Smile, quotes: pd.DataFrame, T: float, df: float) -> np.ndarray:
@@ -333,27 +415,3 @@ def lognormal_cdf(F: float, s: float, x: float, T: float) -> float:
     if x <= 0:
         return 0.0
     return float(norm_cdf((log(x / F) + 0.5 * s * s * T) / (s * sqrt(T))))
-
-
-def bucket_table(dist: pd.DataFrame, centers, h: float, F_ln: float | None = None,
-                 s_ln: float | None = None, T: float | None = None) -> pd.DataFrame:
-    """Probability that S_T lands in (K - h/2, K + h/2] for each center K inside the quoted range.
-
-    `implied` is the probability of the bucket. `butterfly` is what a butterfly with strike
-    spacing h measures on the smooth curve: (c(K-h) - 2c(K) + c(K+h)) / (df h), a
-    triangle-weighted average over (K-h, K+h), so it differs a little from the bucket. Compare
-    Project 1's butterflies with that column. Optionally adds Black-Scholes probabilities.
-    """
-    Kg, cg = dist["strike"].to_numpy(), dist["call"].to_numpy()
-    rows = []
-    for K in centers:
-        lo, hi = prob_below(dist, K - h / 2), prob_below(dist, K + h / 2)
-        if lo is None or hi is None or K - h < Kg[0] or K + h > Kg[-1]:
-            continue
-        c = np.interp([K - h, K, K + h], Kg, cg)
-        row = {"strike": float(K), "implied": hi - lo,
-               "butterfly": (c[0] - 2 * c[1] + c[2]) / (df_of(dist) * h)}
-        if F_ln is not None:
-            row["lognormal"] = lognormal_cdf(F_ln, s_ln, K + h / 2, T) - lognormal_cdf(F_ln, s_ln, K - h / 2, T)
-        rows.append(row)
-    return pd.DataFrame(rows)

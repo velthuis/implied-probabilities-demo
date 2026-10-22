@@ -13,16 +13,15 @@ import pandas as pd
 import pytest
 from scipy.stats import lognorm
 
-from bl import (add_implied_vols, auto_smile, black_call, black_implied_vol, black_put, bl_distribution,
-                bucket_table, default_series, density_checks, fit_report, fit_smile, one_series,
+from bl import (add_implied_vols, ask_market, auto_smile, equity_premium, real_world, black_call, black_implied_vol, black_put, bl_distribution,
+                default_series, density_checks, fit_report, fit_smile, one_series,
                 otm_quotes, parity_forward, prob_below, read_cboe_csv, series_list, smile_prices)
 from pricing import bs_call, bs_put
 
-RAW = "data/spx_quotedata_2022-04-27.csv"      # the Project 1 snapshot
-NEW = "data/spx_quotedata_2026-10-19.csv"      # the app's default file
+NEW = "data/spx_quotedata_2026-10-19.csv"      # the app's saved Cboe download
 
 
-def snapshot(path=RAW):
+def snapshot(path=NEW):
     chain, spot, quote_date = read_cboe_csv(path)
     expiration, root = series_list(chain)[0]
     T = (expiration - quote_date).days / 365
@@ -43,17 +42,6 @@ def quotes_from(call_price, strikes, F, df, half_spread):
 
 
 # ---------- Reading the raw Cboe file ----------
-
-def test_reads_the_raw_cboe_file():
-    # Values typed from the file's header and its 4,800 row (see the README's Data section).
-    chain, spot, quote_date = read_cboe_csv(RAW)
-    assert spot == 4183.96
-    assert quote_date == date(2022, 4, 27)
-    assert series_list(chain) == [(date(2023, 4, 21), "SPX")]
-    assert len(chain) == 121
-    row = chain[chain["strike"] == 4800].iloc[0]
-    assert (row["call_bid"], row["call_ask"], row["put_bid"], row["put_ask"]) == (125.0, 129.2, 663.9, 675.5)
-
 
 def test_reads_the_new_cboe_file():
     # Values typed from the Oct 19, 2026 download: header and the 7,000 row.
@@ -170,26 +158,12 @@ def test_recovers_a_two_peaked_distribution():
         assert prob_below(dist, x) == pytest.approx(truth(x), abs=0.005)
 
 
-def test_buckets_are_differences_of_the_cdf():
-    F, T, df, s = 4300.0, 1.0, 0.97, 0.20
-    chain = quotes_from(lambda K: black_call(F, K, s, T, df), np.arange(2000.0, 7001.0, 50.0), F, df, 0.2)
-    dist = bl_distribution(fit_smile(add_implied_vols(otm_quotes(chain, F), F, T, df), F), T, df)
-    b = bucket_table(dist, [4000.0, 4200.0], 200.0, F_ln=F, s_ln=s, T=T)
-    truth = lognorm(s=s, scale=F * exp(-0.5 * s * s))
-    assert b["implied"].tolist() == pytest.approx([truth.cdf(4100) - truth.cdf(3900), truth.cdf(4300) - truth.cdf(4100)], abs=1e-4)
-    assert np.allclose(b["implied"], b["lognormal"], atol=1e-4)
-    # The butterfly column is the price of a butterfly on Black-Scholes prices, divided by df h.
-    fly = (black_call(F, 3800.0, s, T, df) - 2 * black_call(F, 4000.0, s, T, df) + black_call(F, 4200.0, s, T, df)) / (df * 200)
-    assert b["butterfly"].iloc[0] == pytest.approx(fly, abs=1e-5)
-
-
 # ---------- The snapshot ----------
 
-@pytest.mark.parametrize("path", [RAW, NEW])
-def test_tails_agree_with_option_spreads_on_the_snapshot(path):
+def test_tails_agree_with_option_spreads_on_the_snapshot():
     # Model-free check: a tight put spread pays about (K2 - K1) when the index ends below K1, so
     # P(S_T < (K1 + K2)/2) ~ (p(K2) - p(K1)) / ((K2 - K1) df); call spreads give the right tail.
-    one, spot, T, F, df = snapshot(path)
+    one, spot, T, F, df = snapshot()
     dist = bl_distribution(fit_smile(add_implied_vols(otm_quotes(one, F), F, T, df), F), T, df)
     put_mid = (one["put_bid"] + one["put_ask"]) / 2
     call_mid = (one["call_bid"] + one["call_ask"]) / 2
@@ -203,21 +177,69 @@ def test_tails_agree_with_option_spreads_on_the_snapshot(path):
         assert 1 - prob_below(dist, (k[j] + k[j - 1]) / 2) == pytest.approx(above, abs=0.01)
 
 
-@pytest.mark.parametrize("path", [RAW, NEW])
-def test_snapshot_distribution_is_valid(path):
-    # No negative probabilities, total probability 1, and a mean equal to the forward.
-    one, spot, T, F, df = snapshot(path)
+def test_implied_vols_match_cboes_own():
+    # Cboe's file has its own implied-vol column, computed with Cboe's model and inputs. Ours,
+    # from the mid-quotes and the parity forward, must agree within one vol point.
+    one, spot, T, F, df = snapshot()
+    q = add_implied_vols(otm_quotes(one, F), F, T, df)
+    cboe = one.set_index("strike")
+    theirs = np.array([cboe.loc[K, f"{t}_iv_cboe"] for K, t in zip(q["strike"], q["type"])])
+    assert (theirs > 0).all()
+    assert np.abs(q["iv"].to_numpy() - theirs).max() < 0.01
+
+
+def test_snapshot_distribution_is_valid():
+    # No negative probabilities, cumulative probabilities between 0 and 1, and a good fit.
+    one, spot, T, F, df = snapshot()
     quotes = add_implied_vols(otm_quotes(one, F), F, T, df)
     smile = fit_smile(quotes, F)
     dist = bl_distribution(smile, T, df)
     chk = density_checks(dist)
     assert chk["valid"] and chk["negative_mass"] < 1e-4 and chk["cdf_outside"] == 0.0
     assert 0 < chk["below"] < 0.02 and 0 < chk["above"] < 0.02
-    # The density (second differences) must integrate to the same probability as the
-    # cumulative probabilities (first differences) say lies between the strikes.
+    # Two closed-form results checked against each other: the density, integrated numerically,
+    # must give the probability that the cumulative probabilities say lies between the strikes.
     trapezoid = getattr(np, "trapezoid", None) or np.trapz
     assert trapezoid(dist["pdf"], dist["strike"]) == pytest.approx(chk["inside"], abs=1e-3)
     assert fit_report(smile_prices(smile, quotes, T, df), quotes)["inside_spread"] >= 0.9
+
+
+def test_ask_the_market_on_a_flat_smile():
+    # With one volatility, "Ask the market" must give scipy's lognormal for both sides, and the two
+    # sides must add up to 1. Beyond the quoted strikes it reports a bound, not a number.
+    F, T, df, s = 4300.0, 1.0, 0.97, 0.20
+    chain = quotes_from(lambda K: black_call(F, K, s, T, df), np.arange(2000.0, 7001.0, 50.0), F, df, 0.2)
+    dist = bl_distribution(fit_smile(add_implied_vols(otm_quotes(chain, F), F, T, df), F), T, df)
+    truth = lognorm(s=s * sqrt(T), scale=F * exp(-0.5 * s * s * T))
+    lo, hi = ask_market(dist, 3500.0, "below", F, s, T), ask_market(dist, 3500.0, "above", F, s, T)
+    assert lo["implied"] == pytest.approx(truth.cdf(3500.0), abs=1e-4)
+    assert lo["bs"] == pytest.approx(truth.cdf(3500.0), abs=1e-9)
+    assert lo["implied"] + hi["implied"] == pytest.approx(1.0)
+    assert lo["bound"] is None and hi["bound"] is None
+    low = dist["strike"].iloc[0]                                 # the lowest strike with a usable quote
+    far = ask_market(dist, 1000.0, "below", F, s, T)
+    assert far["bound"] == "at most" and far["implied"] == pytest.approx(truth.cdf(low), abs=1e-4)
+    assert ask_market(dist, 1000.0, "above", F, s, T)["bound"] == "at least"
+
+
+def test_real_world_reweighting_of_a_lognormal():
+    # Power utility turns a lognormal risk-neutral density into another lognormal whose log-mean is
+    # higher by gamma * s^2 * T, so the expected return above the risk-free rate is gamma * s^2 a
+    # year. Both follow from the formula on paper; scipy gives the shifted distribution.
+    F, T, s, gamma = 4300.0, 1.0, 0.20, 2.0
+    K = np.arange(500.0, 20001.0, 5.0)
+    q_dist = lognorm(s=s * sqrt(T), scale=F * exp(-0.5 * s * s * T))
+    q = pd.DataFrame({"strike": K, "pdf": q_dist.pdf(K)})
+    p = real_world(q, gamma)
+    p_truth = lognorm(s=s * sqrt(T), scale=F * exp(-0.5 * s * s * T + gamma * s * s * T))
+    for x in (3000.0, 4300.0, 6000.0):
+        assert np.interp(x, p["strike"], p["cdf"]) == pytest.approx(p_truth.cdf(x), abs=1e-4)
+    assert equity_premium(q, p, T) == pytest.approx(gamma * s * s, abs=1e-4)
+    # No fear, no difference; more fear, a smaller real-world chance of a big fall.
+    p0 = real_world(q, 0.0)
+    assert np.interp(3500.0, p0["strike"], p0["cdf"]) == pytest.approx(q_dist.cdf(3500.0), abs=1e-4)
+    falls = [np.interp(0.8 * F, real_world(q, g)["strike"], real_world(q, g)["cdf"]) for g in (0.0, 1.0, 3.0)]
+    assert falls[0] > falls[1] > falls[2]
 
 
 def test_density_checks_catch_bad_distributions():
@@ -253,7 +275,7 @@ def test_default_expiration_is_nearest_one_year_with_enough_strikes():
 
 def test_no_smoothing_gives_negative_probabilities():
     # A curve through every quote inherits their noise: the density goes negative somewhere,
-    # which is why we smooth (and what raw butterflies show in Project 1).
+    # which is why we smooth.
     one, spot, T, F, df = snapshot()
     quotes = add_implied_vols(otm_quotes(one, F), F, T, df)
     assert density_checks(bl_distribution(fit_smile(quotes, F, smoothing=0.0), T, df))["negative_mass"] > 0.01
@@ -266,7 +288,7 @@ def test_too_much_smoothing_breaks_the_fit():
     quotes = add_implied_vols(otm_quotes(one, F), F, T, df)
     smile = fit_smile(quotes, F, smoothing=10.0)
     assert fit_report(smile_prices(smile, quotes, T, df), quotes)["inside_spread"] < 0.5
-    assert density_checks(bl_distribution(smile, T, df))["cdf_outside"] > 0.01
+    assert not density_checks(bl_distribution(smile, T, df))["valid"]
 
 
 def test_rejects_bad_inputs():
@@ -274,8 +296,8 @@ def test_rejects_bad_inputs():
         black_call(100.0, 100.0, -0.2, 1.0, 1.0)
     with pytest.raises(ValueError, match="not a Cboe quotes file"):
         read_cboe_csv(io.StringIO("strike,bid,ask\n100,1,2\n"))
-    with open(RAW) as f:
-        broken = f.read().replace(",4800,", ",4,800,")      # an unquoted thousands separator
+    with open(NEW) as f:
+        broken = f.read().replace(",7000.00,", ",7,000.00,")      # an unquoted thousands separator
     with pytest.raises(ValueError, match="columns"):
         read_cboe_csv(io.StringIO(broken))
     one, spot, T, F, df = snapshot()

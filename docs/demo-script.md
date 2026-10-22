@@ -9,16 +9,20 @@ step).
 | Step | What you show | Time |
 |---|---|---|
 | Prompt 1 live, in plan mode | The agent reads AGENTS.md and proposes files, tests and checks; you edit the plan and ask "what would make these numbers wrong?" | 2–3 min |
-| The finished app | `streamlit run app.py`: the smile, the distribution vs. Black-Scholes, the tail table; then set the smoothing to "none" | 1–2 min |
+| The finished app | `streamlit run app.py`: **Ask the market** (a class guess first: how likely is a 20% fall by Dec 2027?), the smile, the distribution vs. Black-Scholes; then set the smoothing to "none" | 2–3 min |
 | The evidence | `pytest` (29 passed) and two rows of the critic review in `AI_LOG.md` | 1–2 min |
 | Optional: prompt 3 live | Only if you are ahead of time; the agent writes and runs the checks | +3–5 min |
 
-Agent replies take 30–90 seconds. Talk through the spec (slide 9 of the class deck) while the plan
-is written. After the demo, students do **Catch the AI** in teams: `exercise/README.md`, 8 minutes.
-After the debrief, run the **critic** live on the exercise (slide 15, 2 minutes): new chat (+), pick
-`critic` in the agent menu below the chat box, and ask "Review exercise/cip.py and its tests. Try
-to make the numbers wrong. Do not edit any file." It should flag the annual compounding and the
-test that compares the code with itself.
+Agent replies take 30–90 seconds. Talk through the spec while the plan is written.
+
+**Second class (options):** after the definition and the payoffs by hand, the class builds a payoff
+app in a practice repo made from the template (deck slides 14–22, the worksheet, and
+INSTRUCTOR-SETUP.md). `options/` here is the backup: a version an agent wrote earlier
+(`streamlit run options/app.py`, `pytest options`) and a Colab starter. Run the **critic** on the
+class build (slide 22): new chat (+), pick `critic` in the agent menu below the chat box, and ask
+"Review pricing.py, app.py and the tests. Try to make the numbers wrong. Do not edit any file."
+
+The first class ended with **Catch the AI** on `exercise/` (now hidden at the end of the deck).
 
 Everything runs in a **Codespace** (VS Code in the browser, opened from github.com), the same as
 students use. The github.com page alone cannot run `pytest` or the app.
@@ -31,7 +35,7 @@ students use. The github.com page alone cannot run `pytest` or the app.
   `streamlit run app.py`, so you can switch to it without waiting.
 - In Copilot Chat, open the agent menu below the chat box and check that `critic` and `examiner`
   are listed. If not, reload the window (Ctrl+Shift+P → "Developer: Reload Window"). Rehearse
-  the critic once on `exercise/cip.py`, then undo any changes (Source Control → Discard All
+  the critic once on `options/payoff.py`, then undo any changes (Source Control → Discard All
   Changes).
 - Codespaces stop after 30 idle minutes by default. Raise the idle timeout at
   github.com/settings/codespaces, or reopen both from github.com/codespaces 10 minutes before
@@ -44,8 +48,7 @@ students use. The github.com page alone cannot run `pytest` or the app.
 "Question: what distribution for the S&P 500 at an expiration date do option prices imply?
 Input: Cboe's SPX quotes file, exactly as downloaded. Output: the implied distribution and tail
 probabilities next to Black-Scholes, and checks that the distribution is valid.
-Method: Breeden-Litzenberger on a smoothed volatility smile (Malz 2014). Our Project 1
-butterflies will check it."
+Method: Breeden-Litzenberger on a smoothed volatility smile (Malz 2014)."
 
 ## 2. Plan first: prompt 1, live (plan mode / "don't write code yet")
 > Read AGENTS.md and README.md. Propose a plan for a Breeden-Litzenberger implied-distribution
@@ -53,7 +56,7 @@ butterflies will check it."
 > show the numbers are right, and what app.py will display. Do not write code yet.
 
 Point out: you edit the plan before approving. Ask "what would make these numbers wrong?"
-(A wrong forward; noise in the quotes, which second derivatives magnify; reading probabilities
+(A wrong forward; noise in the quotes, which the density magnifies; reading probabilities
 beyond the last strike.)
 
 ## 3. Build the core with tests: prompt 2
@@ -80,8 +83,8 @@ Point out: a test that uses the same function on both sides cannot fail.
 > Generate every caption from the numbers. Then run streamlit.
 
 Point out: set the smoothing to "none". The smile looks the same, but the distribution turns
-into spikes with negative probabilities: second derivatives magnify tiny wiggles. That is what
-raw butterflies do in Project 1.
+into spikes with negative probabilities: the density depends on the curve's curvature, which
+turns tiny wiggles in the quotes into spikes.
 
 ## 5b. Adversarial check (if time allows)
 Open a new chat, pick the `critic` agent, and ask: "Review this app and its tests. Try to make

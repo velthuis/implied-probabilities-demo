@@ -19,13 +19,15 @@ current. When the agent makes the same mistake twice, add a rule here.
 - `app.py`: Streamlit user interface only. It calls functions from the modules.
 - `tests/`: pytest. Every formula gets at least one test against a number we checked
   independently (textbook example, scipy, numerical integration, a hand calculation, or the quotes).
+  Textbook numbers come from us; never use one from memory.
 - `data/`: raw downloads, renamed with their quote date. Never edit them by hand. See the README's Data section.
 
 ## When you plan (plan mode, or when we say "plan first")
 Do not edit files. A plan lists:
 1. The files you will change, and why.
-2. Each test you will add and the independent number it compares with (textbook example,
-   scipy, numerical integration, a hand calculation, or the quotes themselves).
+2. Each test you will add and the independent number it compares with (a textbook example we
+   give you, scipy, numerical integration, a hand calculation, or the quotes themselves). List
+   the numbers you still need from us.
 3. What the app will show, with units and labels for assumptions and scenarios.
 4. What could make the numbers wrong (units, sign conventions, bid vs. ask, extrapolation).
 Keep each step small enough for us to review in one sitting.
@@ -85,7 +87,8 @@ Keep each step small enough for us to review in one sitting.
   strikes outside the fitted range. Captions must be generated from the numbers, not hard-coded.
 - Never extrapolate beyond the quoted strikes. Show a result only when the distribution passes
   the validity checks (no negative density; cumulative probabilities between 0 and 1).
-- Do not compute butterflies from raw quotes: students do that in Project 1.
+- Do not add other ways of turning option quotes into probabilities: students build their own in
+  a later assignment.
 
 ## Before you say a task is done
 1. Run `pytest` and report the result.
