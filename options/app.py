@@ -8,6 +8,8 @@ from payoff import SHARES_PER_CONTRACT, break_even, payoff, profit
 
 st.set_page_config(page_title="Option payoffs", page_icon="📈")
 st.title("Option payoff and profit at expiration")
+st.caption("MSF 8615 class exercise: an AI agent wrote this app, and its tests pass. "
+           "Check it against your own numbers before you trust it.")
 
 c1, c2 = st.columns(2)
 option = c1.selectbox("Option", ["call", "put"])

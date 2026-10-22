@@ -26,6 +26,7 @@ the same steps as the live demo in `docs/demo-script.md`. The instructor reviewe
 | 2026-10-21 | Instructor + agent | Claude (Cowork) | Show visually what risk-neutral probabilities are | A fear slider: `real_world()` reweights the market's density by S^γ (Bliss and Panigirtzoglou 2004) and the app shows both curves, the real-world chance of a 20% fall and the implied equity premium | On paper a lognormal's log-mean shifts by γσ²T: scipy agrees, premium γσ²; at γ = 2 the app shows 3.8% and 5.3% a year; 29 tests pass |
 | 2026-10-21 | Instructor + agent | Claude (Cowork) | A backup for the options class: a payoff app from the class prompt, and a Colab starter notebook | `options/` with its own tests, run with `pytest options` | Its 4 tests pass |
 | 2026-10-22 | Instructor + agent | Claude (Cowork) | Link to the Minneapolis Fed's market-based probabilities | A caption under Ask the market, plus the method notes and README references | Checked the page: options-based, a variation of Shimko (1993); app tests pass |
+| 2026-10-22 | Instructor + agent | Claude (Cowork) | Deploy the options backup as its own Streamlit app | A caption saying an agent wrote it and it needs checking | App test below; the class does the checking |
 
 ## 2. Critic review
 Run the critic agent in a **new chat session**, before each milestone and before the demo. Log every
