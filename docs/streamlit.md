@@ -49,6 +49,9 @@ def load_quotes(path):
   `st.expander("Method")`: a section that opens on click.
 - Output: `st.write`, `st.metric`, `st.dataframe`, `st.line_chart`, `st.altair_chart`,
   `st.error`, `st.info`, `st.download_button`.
+- Dollar signs: in text Streamlit formats (`st.markdown`, `st.write`, `st.caption`, widget labels),
+  anything between two `$` signs becomes math. Write `\$` for a dollar amount (in a Python string,
+  `"\\$"`).
 
 ## Keep formulas out of `app.py`
 Put calculations in modules (`pricing.py`) and test them with `pytest`; `app.py` only reads inputs,

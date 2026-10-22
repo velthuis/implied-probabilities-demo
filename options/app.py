@@ -33,12 +33,13 @@ st.altair_chart((chart + zero).properties(height=360), width="stretch")
 
 be = break_even(option, K, premium)
 per_contract = SHARES_PER_CONTRACT * contracts
+usd = lambda x, d=0: f"\\${x:,.{d}f}"  # escaped: in st.markdown, text between two $ signs is LaTeX math
 if position == "long":
-    loss = f"${premium * per_contract:,.0f} (the premium)"
-    gain = "unlimited" if option == "call" else f"${(K - premium) * per_contract:,.0f} (if the stock falls to 0)"
+    loss = f"{usd(premium * per_contract)} (the premium)"
+    gain = "unlimited" if option == "call" else f"{usd((K - premium) * per_contract)} (if the stock falls to 0)"
 else:
-    gain = f"${premium * per_contract:,.0f} (the premium)"
-    loss = "unlimited" if option == "call" else f"${(K - premium) * per_contract:,.0f} (if the stock falls to 0)"
-st.markdown(f"**Break-even:** ${be:,.2f} at expiration. **Maximum gain:** {gain}. **Maximum loss:** {loss}. "
+    gain = f"{usd(premium * per_contract)} (the premium)"
+    loss = "unlimited" if option == "call" else f"{usd((K - premium) * per_contract)} (if the stock falls to 0)"
+st.markdown(f"**Break-even:** {usd(be, 2)} at expiration. **Maximum gain:** {gain}. **Maximum loss:** {loss}. "
             f"Amounts for {contracts} contract{'s' if contracts > 1 else ''} of {SHARES_PER_CONTRACT} shares.")
 st.caption("European option, at expiration only. Profit = payoff − premium for a long position; the short side is the mirror image.")
