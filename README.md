@@ -151,6 +151,9 @@ streamlit run app.py
 - Breeden, D. and R. Litzenberger (1978). Prices of state-contingent claims implicit in option
   prices. *Journal of Business* 51(4), 621–651.
 - Shimko, D. (1993). Bounds of probability. *Risk* 6(4), 33–37.
+- Federal Reserve Bank of Minneapolis. [Current and historical market-based probabilities](https://www.minneapolisfed.org/banking/current-and-historical-market--based-probabilities):
+  option-implied probabilities for the S&P 500, interest rates, exchange rates and commodities, from a
+  variation of Shimko (1993). Its horizons differ from the app's expiration.
 - Bliss, R. and N. Panigirtzoglou (2002). Testing the stability of implied probability density
   functions. *Journal of Banking & Finance* 26(2–3), 381–422.
 - Bliss, R. and N. Panigirtzoglou (2004). Option-implied risk aversion estimates. *Journal of

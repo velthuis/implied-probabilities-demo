@@ -166,6 +166,10 @@ if checks["valid"]:
                "outcome, so it is not a forecast.")
 else:
     st.info("Choose 'automatic' smoothing to ask the market: at this smoothing the distribution is not valid.")
+st.caption("Compare: the Federal Reserve Bank of Minneapolis publishes [market-based probabilities]"
+           "(https://www.minneapolisfed.org/banking/current-and-historical-market--based-probabilities) "
+           "for the S&P 500, interest rates, exchange rates and commodities, with a similar method (a variation "
+           "of Shimko 1993). Its horizons differ from this expiration, so the numbers won't match exactly.")
 
 left, right = st.columns(2)
 with left:
@@ -292,6 +296,9 @@ Nothing is extrapolated beyond the lowest and highest quoted strikes.
 References: Breeden and Litzenberger (1978), *Journal of Business*; Shimko (1993), *Risk*;
 Bliss and Panigirtzoglou (2002), *Journal of Banking & Finance*; Malz (2014), Federal Reserve Bank of
 New York Staff Report 677. The real-world view: Bliss and Panigirtzoglou (2004), *Journal of Finance*.
+The Federal Reserve Bank of Minneapolis publishes
+[market-based probabilities](https://www.minneapolisfed.org/banking/current-and-historical-market--based-probabilities)
+from options with a variation of Shimko (1993).
 """
     )
 
