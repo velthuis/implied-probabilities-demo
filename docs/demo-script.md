@@ -16,10 +16,10 @@ step).
 Agent replies take 30–90 seconds. Talk through the spec while the plan is written.
 
 **Second class (options):** after the definition and the payoffs by hand, the class builds a payoff
-app in a practice repo made from the template (deck slides 14–22, the worksheet, and
+app in a practice repo made from the template (deck slides 15–29, the worksheet, and
 INSTRUCTOR-SETUP.md). `options/` here is the backup: a version an agent wrote earlier
 (`streamlit run options/app.py`, `pytest options`) and a Colab starter. Run the **critic** on the
-class build (slide 22): new chat (+), pick `critic` in the agent menu below the chat box, and ask
+class build (slide 29): new chat (+), pick `critic` in the agent menu below the chat box, and ask
 "Review pricing.py, app.py and the tests. Try to make the numbers wrong. Do not edit any file."
 
 The first class ended with **Catch the AI** on `exercise/` (now hidden at the end of the deck).

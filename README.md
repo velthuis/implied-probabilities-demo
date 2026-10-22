@@ -18,8 +18,8 @@ distribution** with the single lognormal behind Black-Scholes.
 4. Want to keep your changes? Commit them: GitHub then makes a **fork** (your own copy) under your
    account automatically. Or click **Fork** at the top of this page first. This repository stays
    unchanged.
-5. Working on your own laptop instead? `git clone https://github.com/velthuis/implied-probabilities-demo.git`
-   (needs Git and Python 3.12).
+5. On campus, Codespaces don't open (the network blocks their tunnels): use VS Code on your laptop.
+   `docs/local-setup.md` has the steps (Git, Python 3.12, VS Code, then clone this repository).
 
 **Options class:** `options/` has a payoff app an agent wrote earlier (`streamlit run options/app.py`,
 `pytest options`) and a Colab starter notebook. See `options/README.md`.
