@@ -29,7 +29,8 @@ The Source Control panel (the branch icon on the left) does the same with button
 - **One agent per Codespace at a time.** Two agents changing the same files will collide.
 - **No drive-by reformatting.** Reformatting a whole file changes every line and conflicts with
   everyone. `AGENTS.md` tells agents not to.
-- **Push at least once a day.** Small, frequent pushes conflict less than one big push.
+- **Push when you finish a piece of work**, so teammates build on the latest version. Small,
+  frequent pushes conflict less than one big push.
 - **A red ✗ next to a commit on GitHub** means the tests failed after that push. Whoever pushed it
   fixes it first, before anyone builds on it.
 
