@@ -1,0 +1,104 @@
+# AGENTS.md
+
+Instructions for AI coding agents (GitHub Copilot, Antigravity, Codex, Claude Code, and others)
+working in this repository. All of them read this file at the start of a session. Keep it short and
+current. When the agent makes the same mistake twice, add a rule here.
+
+## Project
+- MSF 8615 Derivatives (Villanova) demo app, built with Streamlit.
+- Teams have 3-5 students. Each member needs at least one own-account commit visible on GitHub.
+- Read RUBRIC.md for assessment criteria. Do not alter it to improve a score.
+- App: "What do option prices imply about the S&P 500?" Reads SPX quotes in Cboe's download layout,
+  applies Breeden-Litzenberger to a smoothed volatility smile (Bliss and Panigirtzoglou 2002;
+  Malz 2014), and compares the risk-neutral distribution with Black-Scholes.
+- Users: classmates and recruiters. Explain every result in plain English on screen.
+
+## Structure
+- `pricing.py` (Black-Scholes) and `bl.py` (Cboe reader, Black-76, parity forward, implied
+  vols, smoothing spline, Breeden-Litzenberger, checks): formulas only, no Streamlit code.
+- `app.py`: Streamlit user interface only. It calls functions from the modules.
+- `tests/`: pytest. Every formula gets at least one test against a number we checked
+  independently (textbook example, scipy, numerical integration, a hand calculation, or the quotes).
+  Textbook numbers come from us; never use one from memory.
+- `data/`: the pseudo quotes file and `make_pseudo_quotes.py`, which writes it. Never edit the CSV by
+  hand: change the script and rerun it. See the README's Data section.
+
+## When you plan (plan mode, or when we say "plan first")
+Do not edit files. A plan lists:
+1. The files you will change, and why.
+2. Each test you will add and the independent number it compares with (a textbook example we
+   give you, scipy, numerical integration, a hand calculation, or the quotes themselves). List
+   the numbers you still need from us.
+3. What the app will show, with units and labels for assumptions and scenarios.
+4. What could make the numbers wrong (units, sign conventions, bid vs. ask, extrapolation).
+Keep each step small enough for us to review in one sitting.
+
+## Sessions and context
+- One task per session. When we switch to an unrelated task, we start a new session (`/clear`).
+- Keep the current goal, decisions and next steps in `PLAN.md`. Update it before a session ends
+  or is compacted, so a fresh session can pick up from the file instead of the chat.
+- Read files when you need them; do not paste whole data files or long logs into the chat.
+  Summarize test output to the failures that matter.
+- If we have corrected you twice on the same point, say so and suggest a fresh session with a
+  better prompt.
+
+## Team agents, skills and logs
+- `.github/agents/` holds two team agents: `critic` and `examiner`. In Copilot
+  chat, pick them from the agent menu; in Copilot CLI, run `copilot --agent critic`. In other
+  tools, we start a new session and ask you to read the agent's file and follow it. The critic
+  always runs in a fresh session.
+- `.agents/skills/check-the-numbers/SKILL.md`: follow it whenever you add or change a calculation.
+
+## The .md files and what to do with them
+- `README.md`: the team's description of the app. When you add a data file, change a formula or
+  add a test, update its Data, Method or Tests section in the same step and point out the edit.
+  Do not rewrite the team's wording elsewhere.
+- `PLAN.md`: yours to keep current (see Sessions and context).
+- `AI_LOG.md`: the team's record of AI use, graded under rubric criterion 5. At the end of each
+  task, draft a row for section 1 in the chat (date, tool and model, what we asked, what we kept
+  or changed, how it was checked). We check it and add it, or ask you to; leave "Who" for us.
+  Never edit or delete existing rows. Sections 2 and 3 hold the critic's findings and the
+  examiner's report, which the team pastes in.
+- `RUBRIC.md`: read it; never change it.
+- `docs/`: guides for the team. Read `docs/streamlit.md` before changing `app.py` and follow
+  `docs/git-and-teamwork.md` for git.
+- `AGENTS.md` (this file): the team adds rules here. When you repeat a mistake, suggest a rule.
+
+## Working with teammates (we all push to `main`)
+- Run `git pull` before you start a task.
+- Change only the files the task needs. Do not reformat, rename or reorder code you were not
+  asked to change; that causes merge conflicts for teammates.
+- Ask before editing `requirements.txt`, and say so when you do.
+- Commit only when asked, with a one-line message. Never run `git push --force`,
+  `git reset --hard`, or anything that rewrites history.
+- If git reports a merge conflict, stop. Show us both versions and explain each before you
+  resolve it, then run `pytest`.
+
+## Rules
+- Do not invent market data. Load it from `data/` or ask us for it. Label pseudo data as such on screen.
+- Label every hypothetical scenario and model assumption on screen.
+- Units: time in years, rates and volatility as annual decimals (0.05, not 5).
+  State units in every docstring.
+- Ask before adding a package. Add any new package to `requirements.txt`.
+- Never put API keys or passwords in code. Use Streamlit secrets.
+- One feature or fix per step. Keep changes small enough for us to review.
+- Fit to mid-quotes of out-of-the-money options. Discount factor df = e^(−rT), with F and df from
+  put-call parity on the loaded file.
+- Probabilities are risk-neutral: never call them forecasts. Flag any number that depends on
+  strikes outside the fitted range. Captions must be generated from the numbers, not hard-coded.
+- Never extrapolate beyond the quoted strikes. Show a result only when the distribution passes
+  the validity checks (no negative density; cumulative probabilities between 0 and 1).
+- Do not add other ways of turning option quotes into probabilities: students build their own in
+  a later assignment.
+
+## Before you say a task is done
+1. Run `pytest` and report the result.
+2. Summarize what you changed and why, in plain English.
+3. List any assumption you made and anything we should check by hand.
+4. Draft the `AI_LOG.md` row for this task.
+
+## Helping beginners
+- Explain unfamiliar GitHub and pytest steps in plain language.
+- Say what a command changes before running it.
+- Do not fabricate test results, commit attribution, or individual understanding.
+- The critic and examiner are review helpers; their feedback is not an official grade.
